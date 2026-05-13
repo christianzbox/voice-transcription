@@ -88,6 +88,10 @@ Reference clips are copied into `speaker_reference_clips/`, and metadata is stor
 
 If reference clips include transcript text, future runs write conservative reference-match suggestions to `02g_speaker_reference_match_suggestions.json` and show those suggestions during speaker naming. These suggestions are transcript/reference-text evidence, not biometric voice recognition, and still require user confirmation.
 
+To inspect your local known-speaker profiles:
+
+    python -m voice_transcription.list_speaker_profiles
+
 To disable interactive naming:
 
 macOS/Linux:
