@@ -272,46 +272,18 @@ Current run speakers:
 """.strip()
 
 
-def suggest_profile_matches(
-    client: OpenAI,
+def _known_speaker_ids(utterances: list[dict[str, Any]]) -> set[str]:
+    return {str(utterance.get("global_speaker_id")) for utterance in utterances if utterance.get("global_speaker_id")}
+
+
+def validate_profile_match_suggestions(
+    raw: dict[str, Any],
     profiles_data: dict[str, Any],
     utterances: list[dict[str, Any]],
 ) -> dict[str, Any]:
     profiles = profiles_data.get("profiles") or {}
-    if not profiles or not utterances:
-        return {"status": "skipped", "suggestions": {}, "warnings": []}
-
-    prompt = _build_profile_suggestion_prompt(profiles_data, utterances)
-
-    try:
-        response = client.responses.create(
-            model=NOTES_MODEL,
-            reasoning={"effort": "low"},
-            input=prompt,
-        )
-    except Exception as exc:
-        return {"status": "failed", "suggestions": {}, "warnings": [f"Profile suggestion request failed: {exc}"]}
-
-    text = response_text(response)
-    try:
-        raw = json.loads(text)
-    except Exception:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                raw = json.loads(text[start : end + 1])
-            except Exception as exc:
-                return {
-                    "status": "failed",
-                    "suggestions": {},
-                    "warnings": [f"Could not parse profile suggestions: {exc}"],
-                }
-        else:
-            return {"status": "failed", "suggestions": {}, "warnings": ["Profile suggestion response was not JSON."]}
-
     known_profile_ids = set(profiles)
-    known_speakers = {str(utterance.get("global_speaker_id")) for utterance in utterances}
+    known_speakers = _known_speaker_ids(utterances)
     suggestions: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
 
@@ -351,3 +323,180 @@ def suggest_profile_matches(
         warnings.extend(_clean_text(warning, limit=500) for warning in raw_warnings if _clean_text(warning))
 
     return {"status": "success", "suggestions": suggestions, "warnings": warnings}
+
+
+def _parse_json_response(text: str) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(text)
+        if isinstance(raw, dict):
+            return raw
+        return None
+    except Exception:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                raw = json.loads(text[start : end + 1])
+                if isinstance(raw, dict):
+                    return raw
+            except Exception:
+                return None
+    return None
+
+
+def suggest_profile_matches(
+    client: OpenAI,
+    profiles_data: dict[str, Any],
+    utterances: list[dict[str, Any]],
+) -> dict[str, Any]:
+    profiles = profiles_data.get("profiles") or {}
+    if not profiles or not utterances:
+        return {"status": "skipped", "suggestions": {}, "warnings": []}
+
+    prompt = _build_profile_suggestion_prompt(profiles_data, utterances)
+
+    try:
+        response = client.responses.create(
+            model=NOTES_MODEL,
+            reasoning={"effort": "low"},
+            input=prompt,
+        )
+    except Exception as exc:
+        return {"status": "failed", "suggestions": {}, "warnings": [f"Profile suggestion request failed: {exc}"]}
+
+    text = response_text(response)
+    raw = _parse_json_response(text)
+    if raw is None:
+        return {"status": "failed", "suggestions": {}, "warnings": ["Profile suggestion response was not JSON."]}
+
+    return validate_profile_match_suggestions(raw, profiles_data, utterances)
+
+
+def _reference_profiles_with_transcripts(profiles_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    profiles = profiles_data.get("profiles") or {}
+    reference_profiles: dict[str, dict[str, Any]] = {}
+
+    for profile_id, profile in profiles.items():
+        if not isinstance(profile, dict):
+            continue
+
+        reference_clips = []
+        for clip in profile.get("reference_clips") or []:
+            if not isinstance(clip, dict):
+                continue
+            transcript = _clean_text(clip.get("transcript"), limit=1200)
+            if transcript:
+                reference_clips.append(
+                    {
+                        "stored_file": clip.get("stored_file"),
+                        "transcript": transcript,
+                    }
+                )
+
+        if reference_clips:
+            reference_profiles[profile_id] = {
+                "profile_id": profile_id,
+                "display_name": profile.get("display_name") or profile_id,
+                "reference_clips": reference_clips,
+            }
+
+    return reference_profiles
+
+
+def _build_reference_match_prompt(
+    profiles_data: dict[str, Any],
+    utterances: list[dict[str, Any]],
+) -> str:
+    reference_profiles = _reference_profiles_with_transcripts(profiles_data)
+    profile_sections: list[str] = []
+
+    for profile_id, profile in sorted(reference_profiles.items()):
+        profile_sections.append(f"## {profile.get('display_name')} ({profile_id})")
+        for clip in profile["reference_clips"][-4:]:
+            profile_sections.append(f"- Reference transcript: {_quote(clip.get('transcript'), limit=320)}")
+
+    speaker_sections: list[str] = []
+    grouped = _utterances_by_global_speaker(utterances)
+    for global_speaker_id, speaker_utterances in sorted(grouped.items()):
+        speaker_sections.append(f"## {global_speaker_id}")
+        for utterance in speaker_utterances[:10]:
+            speaker_sections.append(
+                f"- [{format_ts(float(utterance.get('start_seconds', 0) or 0))}] {_quote(utterance.get('text'))}"
+            )
+
+    return f"""
+You are comparing current meeting speakers with known-speaker reference clip transcripts.
+
+Important:
+- This is transcript/reference-text matching, not biometric voice recognition.
+- Be conservative. Suggest a profile only when reference transcript evidence and current speaker evidence strongly align.
+- Direct self-identification or distinctive repeated first-person context is stronger than generic wording.
+- Do not suggest a known speaker merely because their name was mentioned by someone else.
+- Do not auto-assign names. Return suggestions for the user to confirm.
+- Return only valid JSON.
+
+JSON schema:
+{{
+  "suggestions": [
+    {{
+      "global_speaker_id": "Speaker A",
+      "profile_id": "christian",
+      "suggested_name": "Christian",
+      "confidence": "medium",
+      "reasoning": "Specific transcript evidence supporting or limiting this suggestion."
+    }}
+  ],
+  "warnings": []
+}}
+
+Allowed confidence values: high, medium, low.
+
+Known speaker reference transcripts:
+{chr(10).join(profile_sections) or "No known reference transcripts."}
+
+Current run speakers:
+{chr(10).join(speaker_sections) or "No current speakers."}
+""".strip()
+
+
+def suggest_reference_clip_matches(
+    client: OpenAI,
+    profiles_data: dict[str, Any],
+    utterances: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not utterances:
+        return {"status": "skipped", "suggestions": {}, "warnings": []}
+
+    reference_profiles = _reference_profiles_with_transcripts(profiles_data)
+    if not reference_profiles:
+        return {
+            "status": "skipped",
+            "suggestions": {},
+            "warnings": ["No speaker reference clips with transcript text were available."],
+        }
+
+    prompt = _build_reference_match_prompt(profiles_data, utterances)
+
+    try:
+        response = client.responses.create(
+            model=NOTES_MODEL,
+            reasoning={"effort": "low"},
+            input=prompt,
+        )
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "suggestions": {},
+            "warnings": [f"Reference match suggestion request failed: {exc}"],
+        }
+
+    text = response_text(response)
+    raw = _parse_json_response(text)
+    if raw is None:
+        return {
+            "status": "failed",
+            "suggestions": {},
+            "warnings": ["Reference match suggestion response was not JSON."],
+        }
+
+    return validate_profile_match_suggestions(raw, profiles_data, utterances)

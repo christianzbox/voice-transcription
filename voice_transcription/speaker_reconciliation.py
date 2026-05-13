@@ -655,6 +655,7 @@ def prompt_for_speaker_names(
     utterances: list[dict[str, Any]],
     existing_name_map: dict[str, Any] | None = None,
     profile_suggestions: dict[str, Any] | None = None,
+    reference_match_suggestions: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     if reconciliation.get("status") != "success":
         return None
@@ -668,6 +669,7 @@ def prompt_for_speaker_names(
         str(speaker.get("global_speaker_id")): speaker for speaker in reconciliation.get("global_speakers") or []
     }
     suggestions_by_id = (profile_suggestions or {}).get("suggestions") or {}
+    reference_suggestions_by_id = (reference_match_suggestions or {}).get("suggestions") or {}
 
     print("")
     print("Speaker naming")
@@ -706,6 +708,15 @@ def prompt_for_speaker_names(
                 f"({profile_suggestion.get('confidence', 'low')} confidence)"
             )
             reasoning = _clean_text(profile_suggestion.get("reasoning"), limit=220)
+            if reasoning:
+                print(f"  {reasoning}")
+        reference_suggestion = reference_suggestions_by_id.get(global_speaker_id)
+        if isinstance(reference_suggestion, dict):
+            print(
+                f"- Reference clip suggestion: {reference_suggestion.get('suggested_name')} "
+                f"({reference_suggestion.get('confidence', 'low')} confidence)"
+            )
+            reasoning = _clean_text(reference_suggestion.get("reasoning"), limit=220)
             if reasoning:
                 print(f"  {reasoning}")
         print("- Representative quotes:")

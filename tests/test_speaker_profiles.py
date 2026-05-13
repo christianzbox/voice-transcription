@@ -5,7 +5,9 @@ from voice_transcription.speaker_profiles import (
     load_speaker_profiles,
     profile_id_for_display_name,
     save_speaker_profiles,
+    suggest_reference_clip_matches,
     update_profiles_from_user_names,
+    validate_profile_match_suggestions,
 )
 
 
@@ -88,3 +90,60 @@ def test_add_reference_clip_rejects_unsupported_file_type(tmp_path):
 
 def test_profile_id_for_display_name_is_stable():
     assert profile_id_for_display_name("Christian Zbox") == "christian-zbox"
+
+
+def test_validate_profile_match_suggestions_rejects_unknown_profile_and_speaker():
+    profiles = {
+        "profiles": {
+            "christian": {
+                "display_name": "Christian",
+            }
+        }
+    }
+    utterances = [{"global_speaker_id": "Speaker A", "text": "I will handle the pull request."}]
+
+    result = validate_profile_match_suggestions(
+        {
+            "suggestions": [
+                {
+                    "global_speaker_id": "Speaker A",
+                    "profile_id": "christian",
+                    "confidence": "certain",
+                    "reasoning": "Supported by text.",
+                },
+                {
+                    "global_speaker_id": "Speaker B",
+                    "profile_id": "christian",
+                    "confidence": "high",
+                    "reasoning": "Unknown speaker.",
+                },
+                {
+                    "global_speaker_id": "Speaker A",
+                    "profile_id": "missing",
+                    "confidence": "high",
+                    "reasoning": "Unknown profile.",
+                },
+            ],
+            "warnings": ["Review manually."],
+        },
+        profiles,
+        utterances,
+    )
+
+    assert result["status"] == "success"
+    assert result["suggestions"]["Speaker A"]["suggested_name"] == "Christian"
+    assert result["suggestions"]["Speaker A"]["confidence"] == "low"
+    assert any("unknown speaker" in warning for warning in result["warnings"])
+    assert any("unknown profile" in warning for warning in result["warnings"])
+    assert "Review manually." in result["warnings"]
+
+
+def test_reference_clip_matching_skips_without_reference_transcripts():
+    result = suggest_reference_clip_matches(
+        client=object(),
+        profiles_data={"profiles": {"christian": {"display_name": "Christian", "reference_clips": []}}},
+        utterances=[{"global_speaker_id": "Speaker A", "text": "Hello."}],
+    )
+
+    assert result["status"] == "skipped"
+    assert "No speaker reference clips" in result["warnings"][0]
