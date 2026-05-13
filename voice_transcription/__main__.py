@@ -12,6 +12,7 @@ from .config import (
     BASE_DIR,
     CHUNK_OVERLAP_SECONDS,
     CHUNK_SECONDS,
+    CREATE_MIND_MAP,
     INTERACTIVE_SPEAKER_NAMING,
     INPUT_DIR,
     NOTES_MODEL,
@@ -26,6 +27,7 @@ from .openai_workflow import (
     update_rolling_context,
 )
 from .secrets import get_api_key
+from .mind_map import create_mind_map, render_mind_map_markdown
 from .speaker_reconciliation import (
     apply_reconciliation_to_utterances,
     name_map_to_display_names,
@@ -116,6 +118,7 @@ def main() -> None:
         "chunk_overlap_seconds": CHUNK_OVERLAP_SECONDS,
         "audio_bitrate": AUDIO_BITRATE,
         "audio_sample_rate": AUDIO_SAMPLE_RATE,
+        "create_mind_map": CREATE_MIND_MAP,
         "interactive_speaker_naming": INTERACTIVE_SPEAKER_NAMING,
         "transcribe_model": TRANSCRIBE_MODEL,
         "notes_model": NOTES_MODEL,
@@ -294,6 +297,25 @@ def main() -> None:
     final_notes_path = run_dir / "04_final_meeting_notes.md"
     final_notes_path.write_text(final_notes, encoding="utf-8")
 
+    mind_map_json_path = None
+    mind_map_markdown_path = None
+    if CREATE_MIND_MAP:
+        print("")
+        print("Creating mind map...")
+        mind_map = create_mind_map(
+            client=client,
+            final_notes=final_notes,
+            all_chunk_summaries=all_chunk_summaries,
+            rolling_context=rolling_context,
+            speaker_reconciliation_report=reconciliation_report,
+        )
+        mind_map_json_path = run_dir / "05_mind_map.json"
+        mind_map_json_path.write_text(json.dumps(mind_map, indent=2, ensure_ascii=False), encoding="utf-8")
+        mind_map_markdown_path = run_dir / "05_mind_map.md"
+        mind_map_markdown_path.write_text(render_mind_map_markdown(mind_map), encoding="utf-8")
+    else:
+        print("Skipping mind map because VOICE_TRANSCRIPTION_CREATE_MIND_MAP is false.")
+
     run_readme = f"""
 # Voice Transcription Run
 
@@ -332,6 +354,12 @@ Output files:
 
 10. `04_final_meeting_notes.md`
    - Final meeting notes.
+
+11. `05_mind_map.json`
+   - Structured topic map, if mind map generation is enabled.
+
+12. `05_mind_map.md`
+   - Human-readable topic map, if mind map generation is enabled.
 
 Chunking behavior:
 

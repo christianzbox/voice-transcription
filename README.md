@@ -13,6 +13,7 @@ Voice Transcription takes large meeting recordings, including iPhone Voice Memo 
 - Chunk-level summaries
 - Rolling context across chunks
 - Final meeting notes
+- Mind map / topic map
 - Decisions
 - Action items
 - Open questions
@@ -139,6 +140,8 @@ The important files are:
 - `03_all_chunk_summaries.md`
 - `03a_rolling_context.md`
 - `04_final_meeting_notes.md`
+- `05_mind_map.json`
+- `05_mind_map.md`
 
 The `runs/` folder is ignored by Git except for `runs/.gitkeep`, so generated outputs are not committed.
 
@@ -159,6 +162,17 @@ Windows PowerShell:
     $env:VOICE_TRANSCRIPTION_CHUNK_SECONDS="300"
     $env:VOICE_TRANSCRIPTION_CHUNK_OVERLAP_SECONDS="30"
     $env:VOICE_TRANSCRIPTION_AUDIO_BITRATE="32k"
+    python -m voice_transcription
+
+Mind map generation is enabled by default. To skip it:
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_CREATE_MIND_MAP=false python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_CREATE_MIND_MAP="false"
     python -m voice_transcription
 
 ## Notes about speakers
