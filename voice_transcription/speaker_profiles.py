@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -9,11 +10,13 @@ from typing import Any
 from openai import OpenAI
 
 from .audio import format_ts
-from .config import BASE_DIR, NOTES_MODEL
+from .config import AUDIO_EXTENSIONS, BASE_DIR, NOTES_MODEL
 from .openai_workflow import response_text
 
 PROFILE_STORE_PATH = BASE_DIR / "speaker_profiles.json"
+REFERENCE_CLIPS_DIR = BASE_DIR / "speaker_reference_clips"
 MAX_PROFILE_EXAMPLES = 12
+MAX_REFERENCE_CLIPS = 20
 
 
 def _clean_text(value: Any, *, limit: int = 500) -> str:
@@ -25,6 +28,10 @@ def _clean_text(value: Any, *, limit: int = 500) -> str:
 def _profile_id(display_name: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", "-", display_name.lower()).strip("-")
     return normalized or "speaker"
+
+
+def profile_id_for_display_name(display_name: str) -> str:
+    return _profile_id(display_name)
 
 
 def _quote(text: str, *, limit: int = 180) -> str:
@@ -58,6 +65,36 @@ def save_speaker_profiles(data: dict[str, Any], path: Path = PROFILE_STORE_PATH)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _ensure_profiles_dict(profiles_data: dict[str, Any]) -> dict[str, Any]:
+    profiles = profiles_data.setdefault("profiles", {})
+    if not isinstance(profiles, dict):
+        profiles_data["profiles"] = {}
+        profiles = profiles_data["profiles"]
+    return profiles
+
+
+def _profile_for_name(profiles_data: dict[str, Any], display_name: str, now: str) -> dict[str, Any]:
+    profiles = _ensure_profiles_dict(profiles_data)
+    profile_id = _profile_id(display_name)
+    profile = profiles.setdefault(
+        profile_id,
+        {
+            "profile_id": profile_id,
+            "display_name": display_name,
+            "created_at": now,
+            "updated_at": now,
+            "run_count": 0,
+            "examples": [],
+            "reference_clips": [],
+        },
+    )
+    profile["display_name"] = display_name
+    profile["updated_at"] = now
+    profile.setdefault("examples", [])
+    profile.setdefault("reference_clips", [])
+    return profile
+
+
 def _utterances_by_global_speaker(utterances: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for utterance in utterances:
@@ -78,11 +115,6 @@ def update_profiles_from_user_names(
     if not speaker_name_map:
         return False
 
-    profiles = profiles_data.setdefault("profiles", {})
-    if not isinstance(profiles, dict):
-        profiles_data["profiles"] = {}
-        profiles = profiles_data["profiles"]
-
     grouped = _utterances_by_global_speaker(utterances)
     changed = False
     now = datetime.now().isoformat()
@@ -99,21 +131,8 @@ def update_profiles_from_user_names(
         if not speaker_utterances:
             continue
 
-        profile_id = _profile_id(display_name)
-        profile = profiles.setdefault(
-            profile_id,
-            {
-                "profile_id": profile_id,
-                "display_name": display_name,
-                "created_at": now,
-                "updated_at": now,
-                "run_count": 0,
-                "examples": [],
-            },
-        )
+        profile = _profile_for_name(profiles_data, display_name, now)
 
-        profile["display_name"] = display_name
-        profile["updated_at"] = now
         profile["run_count"] = int(profile.get("run_count", 0) or 0) + 1
 
         examples = profile.setdefault("examples", [])
@@ -135,6 +154,64 @@ def update_profiles_from_user_names(
         changed = True
 
     return changed
+
+
+def add_reference_clip_to_profile(
+    profiles_data: dict[str, Any],
+    *,
+    display_name: str,
+    source_audio_path: Path,
+    transcript_text: str = "",
+    clips_dir: Path = REFERENCE_CLIPS_DIR,
+) -> dict[str, Any]:
+    display_name = _clean_text(display_name, limit=120)
+    if not display_name:
+        raise ValueError("display_name is required.")
+
+    source_audio_path = source_audio_path.expanduser()
+    if not source_audio_path.exists() or not source_audio_path.is_file():
+        raise FileNotFoundError(f"Reference clip not found: {source_audio_path}")
+
+    suffix = source_audio_path.suffix.lower()
+    if suffix not in AUDIO_EXTENSIONS:
+        raise ValueError(f"Unsupported reference clip extension: {suffix or '(none)'}")
+
+    now = datetime.now().isoformat()
+    profile = _profile_for_name(profiles_data, display_name, now)
+    profile_id = str(profile["profile_id"])
+    profile_clip_dir = clips_dir / profile_id
+    profile_clip_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    destination = profile_clip_dir / f"reference_{timestamp}{suffix}"
+    counter = 1
+    while destination.exists():
+        destination = profile_clip_dir / f"reference_{timestamp}_{counter}{suffix}"
+        counter += 1
+
+    shutil.copy2(source_audio_path, destination)
+
+    reference_clips = profile.setdefault("reference_clips", [])
+    if not isinstance(reference_clips, list):
+        profile["reference_clips"] = []
+        reference_clips = profile["reference_clips"]
+
+    clip_record = {
+        "added_at": now,
+        "source_file": str(source_audio_path),
+        "stored_file": str(destination),
+        "transcript": _clean_text(transcript_text, limit=4000),
+    }
+    reference_clips.append(clip_record)
+    profile["reference_clips"] = reference_clips[-MAX_REFERENCE_CLIPS:]
+    profile["reference_clip_count"] = len(profile["reference_clips"])
+
+    return {
+        "profile_id": profile_id,
+        "display_name": display_name,
+        "stored_file": str(destination),
+        "reference_clip_count": profile["reference_clip_count"],
+    }
 
 
 def _build_profile_suggestion_prompt(
