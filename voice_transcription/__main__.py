@@ -16,6 +16,7 @@ from .config import (
     INPUT_DIR,
     NOTES_MODEL,
     RUNS_DIR,
+    SUMMARY_TEMPLATE,
     TRANSCRIBE_MODEL,
 )
 from .openai_workflow import (
@@ -117,6 +118,7 @@ def main() -> None:
         "audio_bitrate": AUDIO_BITRATE,
         "audio_sample_rate": AUDIO_SAMPLE_RATE,
         "interactive_speaker_naming": INTERACTIVE_SPEAKER_NAMING,
+        "summary_template": SUMMARY_TEMPLATE,
         "transcribe_model": TRANSCRIBE_MODEL,
         "notes_model": NOTES_MODEL,
         "created_at": datetime.now().isoformat(),
