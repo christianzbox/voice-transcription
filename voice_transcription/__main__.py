@@ -12,10 +12,13 @@ from .config import (
     BASE_DIR,
     CHUNK_OVERLAP_SECONDS,
     CHUNK_SECONDS,
+    CREATE_MIND_MAP,
     INTERACTIVE_SPEAKER_NAMING,
     INPUT_DIR,
     NOTES_MODEL,
     RUNS_DIR,
+    SPEAKER_PROFILE_SUGGESTIONS,
+    SUMMARY_TEMPLATE,
     TRANSCRIBE_MODEL,
 )
 from .openai_workflow import (
@@ -27,6 +30,13 @@ from .openai_workflow import (
 )
 from .run_index import build_run_index_entry, upsert_run_index_entry
 from .secrets import get_api_key
+from .mind_map import create_mind_map, render_mind_map_markdown
+from .speaker_profiles import (
+    load_speaker_profiles,
+    save_speaker_profiles,
+    suggest_profile_matches,
+    update_profiles_from_user_names,
+)
 from .speaker_reconciliation import (
     apply_reconciliation_to_utterances,
     name_map_to_display_names,
@@ -117,7 +127,10 @@ def main() -> None:
         "chunk_overlap_seconds": CHUNK_OVERLAP_SECONDS,
         "audio_bitrate": AUDIO_BITRATE,
         "audio_sample_rate": AUDIO_SAMPLE_RATE,
+        "create_mind_map": CREATE_MIND_MAP,
         "interactive_speaker_naming": INTERACTIVE_SPEAKER_NAMING,
+        "speaker_profile_suggestions": SPEAKER_PROFILE_SUGGESTIONS,
+        "summary_template": SUMMARY_TEMPLATE,
         "transcribe_model": TRANSCRIBE_MODEL,
         "notes_model": NOTES_MODEL,
         "created_at": datetime.now().isoformat(),
@@ -253,15 +266,46 @@ def main() -> None:
     speaker_name_map = None
     speaker_name_map_path = None
     named_transcript_path = None
+    profile_suggestions = {"status": "skipped", "suggestions": {}, "warnings": []}
+
+    if reconciliation.get("status") == "success" and SPEAKER_PROFILE_SUGGESTIONS:
+        speaker_profiles = load_speaker_profiles()
+        profile_suggestions = suggest_profile_matches(
+            client=client,
+            profiles_data=speaker_profiles,
+            utterances=reconciled_utterances,
+        )
+        profile_suggestions_path = run_dir / "02f_speaker_profile_suggestions.json"
+        profile_suggestions_path.write_text(
+            json.dumps(profile_suggestions, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    elif not SPEAKER_PROFILE_SUGGESTIONS:
+        print("Skipping speaker profile suggestions because VOICE_TRANSCRIPTION_SPEAKER_PROFILE_SUGGESTIONS is false.")
 
     if INTERACTIVE_SPEAKER_NAMING:
-        speaker_name_map = prompt_for_speaker_names(reconciliation, reconciled_utterances)
+        speaker_name_map = prompt_for_speaker_names(
+            reconciliation,
+            reconciled_utterances,
+            profile_suggestions=profile_suggestions,
+        )
         if speaker_name_map is not None:
             speaker_name_map_path = run_dir / "02d_speaker_name_map.json"
             speaker_name_map_path.write_text(
                 json.dumps(speaker_name_map, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+
+            speaker_profiles = load_speaker_profiles()
+            if update_profiles_from_user_names(
+                speaker_profiles,
+                speaker_name_map,
+                reconciled_utterances,
+                run_name=run_name,
+                input_file=audio_path,
+            ):
+                save_speaker_profiles(speaker_profiles)
+                print("Updated local speaker profiles from user-confirmed names.")
 
             display_names = name_map_to_display_names(speaker_name_map)
             if display_names:
@@ -295,6 +339,25 @@ def main() -> None:
     final_notes_path = run_dir / "04_final_meeting_notes.md"
     final_notes_path.write_text(final_notes, encoding="utf-8")
 
+    mind_map_json_path = None
+    mind_map_markdown_path = None
+    if CREATE_MIND_MAP:
+        print("")
+        print("Creating mind map...")
+        mind_map = create_mind_map(
+            client=client,
+            final_notes=final_notes,
+            all_chunk_summaries=all_chunk_summaries,
+            rolling_context=rolling_context,
+            speaker_reconciliation_report=reconciliation_report,
+        )
+        mind_map_json_path = run_dir / "05_mind_map.json"
+        mind_map_json_path.write_text(json.dumps(mind_map, indent=2, ensure_ascii=False), encoding="utf-8")
+        mind_map_markdown_path = run_dir / "05_mind_map.md"
+        mind_map_markdown_path.write_text(render_mind_map_markdown(mind_map), encoding="utf-8")
+    else:
+        print("Skipping mind map because VOICE_TRANSCRIPTION_CREATE_MIND_MAP is false.")
+
     run_readme = f"""
 # Voice Transcription Run
 
@@ -325,14 +388,23 @@ Output files:
 7. `02e_named_speaker_transcript.txt`
    - Transcript with user-confirmed speaker names, if any names were entered.
 
-8. `03_all_chunk_summaries.md`
+8. `02f_speaker_profile_suggestions.json`
+   - Conservative known-speaker profile suggestions, if local profiles exist.
+
+9. `03_all_chunk_summaries.md`
    - Summaries for each chunk.
 
-9. `03a_rolling_context.md`
+10. `03a_rolling_context.md`
    - Compact context carried forward between chunks.
 
-10. `04_final_meeting_notes.md`
+11. `04_final_meeting_notes.md`
    - Final meeting notes.
+
+11. `05_mind_map.json`
+   - Structured topic map, if mind map generation is enabled.
+
+12. `05_mind_map.md`
+   - Human-readable topic map, if mind map generation is enabled.
 
 Chunking behavior:
 
@@ -346,6 +418,8 @@ Important note about speakers:
 Because huge files are split into chunks, speaker labels may reset between chunks. For example, Speaker 1 in Chunk 1 may not always be the same person as Speaker 1 in Chunk 4.
 
 This run includes conservative speaker reconciliation. The app writes stable generic speaker labels first, then optionally asks for user-confirmed names. It does not invent real names when evidence is unclear.
+
+If you enter names, they are saved in a local ignored `speaker_profiles.json` file. Future runs may show those names as suggestions, but the app still requires user confirmation before applying them.
 """.strip()
 
     (run_dir / "README.md").write_text(run_readme, encoding="utf-8")

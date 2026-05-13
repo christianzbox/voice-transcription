@@ -10,9 +10,11 @@ Voice Transcription takes large meeting recordings, including iPhone Voice Memo 
 - Full timestamped speaker transcript
 - Stable cross-chunk speaker reconciliation
 - Optional user-confirmed speaker names
+- Local speaker profile suggestions
 - Chunk-level summaries
 - Rolling context across chunks
 - Final meeting notes
+- Mind map / topic map
 - Decisions
 - Action items
 - Open questions
@@ -64,6 +66,10 @@ You can enter a name or press Enter to keep the generic label:
 
 User-entered names are saved to `02d_speaker_name_map.json`. If any names are entered, the app also writes `02e_named_speaker_transcript.txt`. If no names are entered, the named transcript is skipped and the reconciled generic transcript remains the best speaker-labeled transcript.
 
+When you enter a name, the app also updates a local `speaker_profiles.json` file with that user-confirmed name and a few representative quotes. That file is ignored by Git. Future runs can use it to show conservative known-speaker suggestions during the naming prompt.
+
+These suggestions are not automatic voice recognition. They are text-based hints for you to confirm, and pressing Enter keeps the generic label.
+
 To disable interactive naming:
 
 macOS/Linux:
@@ -73,6 +79,37 @@ macOS/Linux:
 Windows PowerShell:
 
     $env:VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING="false"
+    python -m voice_transcription
+
+## Rename speakers after a run
+
+You can fix speaker names later without retranscribing audio:
+
+macOS/Linux:
+
+    python -m voice_transcription.rename_speakers runs/<recording-name>_<timestamp>
+
+Windows PowerShell:
+
+    python -m voice_transcription.rename_speakers .\runs\<recording-name>_<timestamp>
+
+If you omit the run folder, the command uses the newest folder in `runs/`.
+
+For non-interactive updates:
+
+    python -m voice_transcription.rename_speakers runs/<recording-name>_<timestamp> --set "Speaker A=Christian" --set "Speaker B=Sarah"
+
+The command updates `02d_speaker_name_map.json` and rerenders `02e_named_speaker_transcript.txt`. It does not call the transcription API.
+
+To disable known-speaker profile suggestions while keeping manual naming:
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_SPEAKER_PROFILE_SUGGESTIONS=false python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_SPEAKER_PROFILE_SUGGESTIONS="false"
     python -m voice_transcription
 
 ## Folder layout
@@ -127,6 +164,20 @@ List recent indexed runs:
 
     python -m voice_transcription.library
 
+## Ask questions about a run
+
+After a run completes, you can ask follow-up questions without retranscribing audio:
+
+macOS/Linux:
+
+    python -m voice_transcription.ask runs/<recording-name>_<timestamp> --question "What did Christian commit to?"
+
+Windows PowerShell:
+
+    python -m voice_transcription.ask .\runs\<recording-name>_<timestamp> --question "List all deadlines."
+
+If you omit the run folder, the command uses the newest folder in `runs/`. Answers are appended to `05_ask_answers.md` unless you pass `--no-save`.
+
 ## Output files
 
 Each run creates a folder like:
@@ -142,9 +193,13 @@ The important files are:
 - `02c_reconciled_speaker_transcript.txt`
 - `02d_speaker_name_map.json` if interactive naming ran
 - `02e_named_speaker_transcript.txt` if names were entered
+- `02f_speaker_profile_suggestions.json` if profile suggestions ran
 - `03_all_chunk_summaries.md`
 - `03a_rolling_context.md`
 - `04_final_meeting_notes.md`
+- `05_mind_map.json`
+- `05_mind_map.md`
+- `05_ask_answers.md` if you use the ask command
 
 The `runs/` folder is ignored by Git except for `runs/.gitkeep`, so generated outputs are not committed.
 
@@ -165,6 +220,37 @@ Windows PowerShell:
     $env:VOICE_TRANSCRIPTION_CHUNK_SECONDS="300"
     $env:VOICE_TRANSCRIPTION_CHUNK_OVERLAP_SECONDS="30"
     $env:VOICE_TRANSCRIPTION_AUDIO_BITRATE="32k"
+    python -m voice_transcription
+
+Mind map generation is enabled by default. To skip it:
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_CREATE_MIND_MAP=false python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_CREATE_MIND_MAP="false"
+    python -m voice_transcription
+
+## Summary templates
+
+The default final notes format is a general meeting-notes template. You can tune chunk summaries and final notes for a specific meeting type:
+
+- `meeting`
+- `engineering`
+- `sales`
+- `interview`
+- `executive`
+- `legal`
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE=engineering python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE="engineering"
     python -m voice_transcription
 
 ## Notes about speakers
