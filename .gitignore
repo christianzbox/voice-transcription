@@ -12,6 +12,8 @@ runs/*
 input/*
 !input/.gitkeep
 speaker_profiles.json
+templates/*
+!templates/.gitkeep
 speaker_reference_clips/*
 !speaker_reference_clips/.gitkeep
 
