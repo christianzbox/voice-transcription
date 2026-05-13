@@ -121,6 +121,12 @@ The API key is not stored in the repo.
 3. Open the newest folder in `runs/`.
 4. The main output is `04_final_meeting_notes.md`.
 
+After each completed run, the app updates an ignored local index at `runs/index.json`.
+
+List recent indexed runs:
+
+    python -m voice_transcription.library
+
 ## Output files
 
 Each run creates a folder like:

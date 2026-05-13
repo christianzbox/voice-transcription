@@ -25,6 +25,7 @@ from .openai_workflow import (
     transcribe_chunk,
     update_rolling_context,
 )
+from .run_index import build_run_index_entry, upsert_run_index_entry
 from .secrets import get_api_key
 from .speaker_reconciliation import (
     apply_reconciliation_to_utterances,
@@ -348,6 +349,18 @@ This run includes conservative speaker reconciliation. The app writes stable gen
 """.strip()
 
     (run_dir / "README.md").write_text(run_readme, encoding="utf-8")
+
+    index_entry = build_run_index_entry(
+        run_dir=run_dir,
+        metadata=metadata,
+        final_notes=final_notes,
+        full_transcript_path=full_transcript_path,
+        reconciled_transcript_path=reconciled_transcript_path,
+        named_transcript_path=named_transcript_path,
+        speaker_name_map=speaker_name_map,
+        reconciliation=reconciliation,
+    )
+    upsert_run_index_entry(index_entry)
 
     print("")
     print("Done.")
