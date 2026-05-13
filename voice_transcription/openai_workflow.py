@@ -77,10 +77,7 @@ def build_chunk_transcript(data: dict[str, Any], offset_seconds: float, chunk_na
             global_end = offset_seconds + end
 
             if text:
-                lines.append(
-                    f"[{format_ts(global_start)}-{format_ts(global_end)}] "
-                    f"{chunk_name} | {speaker}: {text}"
-                )
+                lines.append(f"[{format_ts(global_start)}-{format_ts(global_end)}] {chunk_name} | {speaker}: {text}")
     else:
         text = (data.get("text") or "").strip()
         if text:
@@ -221,8 +218,12 @@ def create_final_notes(
 ) -> str:
     speaker_report_section = speaker_reconciliation_report.strip() or "No speaker reconciliation report was available."
     best_transcript_path = named_transcript_path or reconciled_transcript_path or full_transcript_path
-    reconciled_path_section = str(reconciled_transcript_path) if reconciled_transcript_path else "No reconciled transcript was available."
-    named_path_section = str(named_transcript_path) if named_transcript_path else "No user-named transcript was available."
+    reconciled_path_section = (
+        str(reconciled_transcript_path) if reconciled_transcript_path else "No reconciled transcript was available."
+    )
+    named_path_section = (
+        str(named_transcript_path) if named_transcript_path else "No user-named transcript was available."
+    )
     template_name, template_instructions = get_summary_template(SUMMARY_TEMPLATE)
     name_map_section = (
         json.dumps(speaker_name_map, indent=2, ensure_ascii=False)

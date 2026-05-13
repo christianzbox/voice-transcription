@@ -93,11 +93,7 @@ def rerender_speaker_names(run_dir: Path, assignments: dict[str, str] | None = N
 
     utterances = apply_reconciliation_to_utterances(raw_records, reconciliation)
     global_speakers = sorted(
-        {
-            str(utterance.get("global_speaker_id"))
-            for utterance in utterances
-            if utterance.get("global_speaker_id")
-        }
+        {str(utterance.get("global_speaker_id")) for utterance in utterances if utterance.get("global_speaker_id")}
     )
 
     if assignments is not None:

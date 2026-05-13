@@ -12,7 +12,6 @@ from .audio import format_ts
 from .config import BASE_DIR, NOTES_MODEL
 from .openai_workflow import response_text
 
-
 PROFILE_STORE_PATH = BASE_DIR / "speaker_profiles.json"
 MAX_PROFILE_EXAMPLES = 12
 
@@ -159,8 +158,7 @@ def _build_profile_suggestion_prompt(
         speaker_sections.append(f"## {global_speaker_id}")
         for utterance in speaker_utterances[:8]:
             speaker_sections.append(
-                f"- [{format_ts(float(utterance.get('start_seconds', 0) or 0))}] "
-                f"{_quote(utterance.get('text'))}"
+                f"- [{format_ts(float(utterance.get('start_seconds', 0) or 0))}] {_quote(utterance.get('text'))}"
             )
 
     return f"""
@@ -227,7 +225,11 @@ def suggest_profile_matches(
             try:
                 raw = json.loads(text[start : end + 1])
             except Exception as exc:
-                return {"status": "failed", "suggestions": {}, "warnings": [f"Could not parse profile suggestions: {exc}"]}
+                return {
+                    "status": "failed",
+                    "suggestions": {},
+                    "warnings": [f"Could not parse profile suggestions: {exc}"],
+                }
         else:
             return {"status": "failed", "suggestions": {}, "warnings": ["Profile suggestion response was not JSON."]}
 

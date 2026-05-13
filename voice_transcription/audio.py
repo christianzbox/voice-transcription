@@ -1,7 +1,7 @@
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from .config import (
     AUDIO_BITRATE,
@@ -186,10 +186,14 @@ def make_chunks(audio_path: Path, run_dir: Path) -> list[dict]:
             print("")
             print("Try smaller chunks or lower bitrate:")
             print("macOS/Linux:")
-            print("  VOICE_TRANSCRIPTION_CHUNK_SECONDS=300 VOICE_TRANSCRIPTION_CHUNK_OVERLAP_SECONDS=30 VOICE_TRANSCRIPTION_AUDIO_BITRATE=32k python -m voice_transcription")
+            print(
+                "  VOICE_TRANSCRIPTION_CHUNK_SECONDS=300 VOICE_TRANSCRIPTION_CHUNK_OVERLAP_SECONDS=30 VOICE_TRANSCRIPTION_AUDIO_BITRATE=32k python -m voice_transcription"
+            )
             print("")
             print("Windows PowerShell:")
-            print('  $env:VOICE_TRANSCRIPTION_CHUNK_SECONDS="300"; $env:VOICE_TRANSCRIPTION_CHUNK_OVERLAP_SECONDS="30"; $env:VOICE_TRANSCRIPTION_AUDIO_BITRATE="32k"; python -m voice_transcription')
+            print(
+                '  $env:VOICE_TRANSCRIPTION_CHUNK_SECONDS="300"; $env:VOICE_TRANSCRIPTION_CHUNK_OVERLAP_SECONDS="30"; $env:VOICE_TRANSCRIPTION_AUDIO_BITRATE="32k"; python -m voice_transcription'
+            )
             sys.exit(1)
 
         chunks.append(

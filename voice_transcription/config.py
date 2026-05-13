@@ -1,5 +1,5 @@
-from pathlib import Path
 import os
+from pathlib import Path
 
 APP_NAME = "voice-transcription"
 KEYRING_SERVICE = "voice-transcription"
@@ -15,6 +15,7 @@ def _env_bool(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() not in {"0", "false", "no", "off"}
+
 
 AUDIO_EXTENSIONS = {
     ".m4a",

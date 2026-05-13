@@ -1,7 +1,7 @@
-from datetime import datetime
 import json
-from pathlib import Path
 import sys
+from datetime import datetime
+from pathlib import Path
 
 from openai import OpenAI
 
@@ -13,14 +13,15 @@ from .config import (
     CHUNK_OVERLAP_SECONDS,
     CHUNK_SECONDS,
     CREATE_MIND_MAP,
-    INTERACTIVE_SPEAKER_NAMING,
     INPUT_DIR,
+    INTERACTIVE_SPEAKER_NAMING,
     NOTES_MODEL,
     RUNS_DIR,
     SPEAKER_PROFILE_SUGGESTIONS,
     SUMMARY_TEMPLATE,
     TRANSCRIBE_MODEL,
 )
+from .mind_map import create_mind_map, render_mind_map_markdown
 from .openai_workflow import (
     build_chunk_transcript,
     create_final_notes,
@@ -30,7 +31,6 @@ from .openai_workflow import (
 )
 from .run_index import build_run_index_entry, upsert_run_index_entry
 from .secrets import get_api_key
-from .mind_map import create_mind_map, render_mind_map_markdown
 from .speaker_profiles import (
     load_speaker_profiles,
     save_speaker_profiles,
