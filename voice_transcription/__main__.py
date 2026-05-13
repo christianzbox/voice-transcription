@@ -28,6 +28,7 @@ from .openai_workflow import (
     transcribe_chunk,
     update_rolling_context,
 )
+from .run_index import build_run_index_entry, upsert_run_index_entry
 from .secrets import get_api_key
 from .mind_map import create_mind_map, render_mind_map_markdown
 from .speaker_profiles import (
@@ -422,6 +423,18 @@ If you enter names, they are saved in a local ignored `speaker_profiles.json` fi
 """.strip()
 
     (run_dir / "README.md").write_text(run_readme, encoding="utf-8")
+
+    index_entry = build_run_index_entry(
+        run_dir=run_dir,
+        metadata=metadata,
+        final_notes=final_notes,
+        full_transcript_path=full_transcript_path,
+        reconciled_transcript_path=reconciled_transcript_path,
+        named_transcript_path=named_transcript_path,
+        speaker_name_map=speaker_name_map,
+        reconciliation=reconciliation,
+    )
+    upsert_run_index_entry(index_entry)
 
     print("")
     print("Done.")
