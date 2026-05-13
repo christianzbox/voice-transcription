@@ -204,7 +204,26 @@ Return only the updated rolling context.
     return response_text(response)
 
 
-def create_final_notes(client: OpenAI, all_chunk_summaries: str, full_transcript_path: Path, rolling_context: str) -> str:
+def create_final_notes(
+    client: OpenAI,
+    all_chunk_summaries: str,
+    full_transcript_path: Path,
+    rolling_context: str,
+    speaker_reconciliation_report: str = "",
+    reconciled_transcript_path: Path | None = None,
+    named_transcript_path: Path | None = None,
+    speaker_name_map: dict[str, Any] | None = None,
+) -> str:
+    speaker_report_section = speaker_reconciliation_report.strip() or "No speaker reconciliation report was available."
+    best_transcript_path = named_transcript_path or reconciled_transcript_path or full_transcript_path
+    reconciled_path_section = str(reconciled_transcript_path) if reconciled_transcript_path else "No reconciled transcript was available."
+    named_path_section = str(named_transcript_path) if named_transcript_path else "No user-named transcript was available."
+    name_map_section = (
+        json.dumps(speaker_name_map, indent=2, ensure_ascii=False)
+        if speaker_name_map
+        else "No user-confirmed speaker name map was available."
+    )
+
     prompt = f"""
 You are creating final meeting notes from chunk-level meeting summaries.
 
@@ -220,9 +239,25 @@ Important:
 - If something was only discussed but not decided, do not label it as a decision.
 - Merge duplicate action items.
 - Keep the notes direct and useful.
+- Use reconciled or user-confirmed speaker labels when available.
+- Do not invent real names.
+- If speaker identity is uncertain, say unclear.
+- Preserve uncertainty from the speaker reconciliation report.
 
 Final rolling context:
 {rolling_context or "None."}
+
+Speaker reconciliation report:
+{speaker_report_section}
+
+Reconciled transcript path:
+{reconciled_path_section}
+
+User-named transcript path:
+{named_path_section}
+
+User-confirmed speaker name map:
+{name_map_section}
 
 Output:
 
@@ -251,7 +286,10 @@ Bullet list of concrete details, requirements, numbers, constraints, or context 
 Write a concise email that could be sent to meeting attendees.
 
 ## Transcript Reference
-Mention that the full merged transcript is saved at:
+Mention that the best available transcript for speaker labels is saved at:
+{best_transcript_path}
+
+Also mention that the original full merged transcript is saved at:
 {full_transcript_path}
 
 Chunk summaries:

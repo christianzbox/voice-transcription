@@ -12,6 +12,7 @@ from .config import (
     BASE_DIR,
     CHUNK_OVERLAP_SECONDS,
     CHUNK_SECONDS,
+    INTERACTIVE_SPEAKER_NAMING,
     INPUT_DIR,
     NOTES_MODEL,
     RUNS_DIR,
@@ -25,6 +26,14 @@ from .openai_workflow import (
     update_rolling_context,
 )
 from .secrets import get_api_key
+from .speaker_reconciliation import (
+    apply_reconciliation_to_utterances,
+    name_map_to_display_names,
+    prompt_for_speaker_names,
+    reconcile_speakers,
+    render_reconciliation_report,
+    render_transcript,
+)
 
 
 def pick_audio_file() -> Path:
@@ -107,6 +116,7 @@ def main() -> None:
         "chunk_overlap_seconds": CHUNK_OVERLAP_SECONDS,
         "audio_bitrate": AUDIO_BITRATE,
         "audio_sample_rate": AUDIO_SAMPLE_RATE,
+        "interactive_speaker_naming": INTERACTIVE_SPEAKER_NAMING,
         "transcribe_model": TRANSCRIBE_MODEL,
         "notes_model": NOTES_MODEL,
         "created_at": datetime.now().isoformat(),
@@ -209,6 +219,59 @@ def main() -> None:
     full_transcript_path = run_dir / "02_full_merged_speaker_transcript.txt"
     full_transcript_path.write_text(full_transcript, encoding="utf-8")
 
+    print("")
+    print("Reconciling speakers across chunks...")
+
+    reconciliation = reconcile_speakers(
+        client=client,
+        raw_records=all_raw,
+        full_transcript=full_transcript,
+    )
+
+    reconciliation_path = run_dir / "02a_speaker_reconciliation.json"
+    reconciliation_path.write_text(
+        json.dumps(reconciliation, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    if reconciliation.get("status") == "success":
+        reconciled_utterances = apply_reconciliation_to_utterances(all_raw, reconciliation)
+        reconciled_transcript = render_transcript(reconciled_utterances)
+    else:
+        reconciled_utterances = []
+        reconciled_transcript = full_transcript
+
+    reconciliation_report = render_reconciliation_report(reconciliation, reconciled_utterances)
+
+    reconciliation_report_path = run_dir / "02b_speaker_reconciliation_report.md"
+    reconciliation_report_path.write_text(reconciliation_report, encoding="utf-8")
+
+    reconciled_transcript_path = run_dir / "02c_reconciled_speaker_transcript.txt"
+    reconciled_transcript_path.write_text(reconciled_transcript, encoding="utf-8")
+
+    speaker_name_map = None
+    speaker_name_map_path = None
+    named_transcript_path = None
+
+    if INTERACTIVE_SPEAKER_NAMING:
+        speaker_name_map = prompt_for_speaker_names(reconciliation, reconciled_utterances)
+        if speaker_name_map is not None:
+            speaker_name_map_path = run_dir / "02d_speaker_name_map.json"
+            speaker_name_map_path.write_text(
+                json.dumps(speaker_name_map, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            display_names = name_map_to_display_names(speaker_name_map)
+            if display_names:
+                named_transcript_path = run_dir / "02e_named_speaker_transcript.txt"
+                named_transcript_path.write_text(
+                    render_transcript(reconciled_utterances, display_names),
+                    encoding="utf-8",
+                )
+    else:
+        print("Skipping interactive speaker naming because VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING is false.")
+
     all_chunk_summaries = "\n\n---\n\n".join(chunk_summaries)
 
     all_chunk_summaries_path = run_dir / "03_all_chunk_summaries.md"
@@ -222,6 +285,10 @@ def main() -> None:
         all_chunk_summaries=all_chunk_summaries,
         full_transcript_path=full_transcript_path,
         rolling_context=rolling_context,
+        speaker_reconciliation_report=reconciliation_report,
+        reconciled_transcript_path=reconciled_transcript_path,
+        named_transcript_path=named_transcript_path,
+        speaker_name_map=speaker_name_map,
     )
 
     final_notes_path = run_dir / "04_final_meeting_notes.md"
@@ -240,15 +307,30 @@ Output files:
    - Raw JSON for all transcribed chunks.
 
 2. `02_full_merged_speaker_transcript.txt`
-   - Full timestamped transcript.
+   - Original full timestamped transcript with chunk-local speaker labels.
 
-3. `03_all_chunk_summaries.md`
+3. `02a_speaker_reconciliation.json`
+   - Validated structured speaker reconciliation data.
+
+4. `02b_speaker_reconciliation_report.md`
+   - Human-readable speaker mapping report with confidence and uncertainty notes.
+
+5. `02c_reconciled_speaker_transcript.txt`
+   - Timestamped transcript with stable meeting-wide generic speaker labels.
+
+6. `02d_speaker_name_map.json`
+   - User-entered speaker names, if interactive speaker naming ran.
+
+7. `02e_named_speaker_transcript.txt`
+   - Transcript with user-confirmed speaker names, if any names were entered.
+
+8. `03_all_chunk_summaries.md`
    - Summaries for each chunk.
 
-4. `03a_rolling_context.md`
+9. `03a_rolling_context.md`
    - Compact context carried forward between chunks.
 
-5. `04_final_meeting_notes.md`
+10. `04_final_meeting_notes.md`
    - Final meeting notes.
 
 Chunking behavior:
@@ -260,7 +342,9 @@ The overlap reduces context loss around boundaries. The summarization prompts ar
 
 Important note about speakers:
 
-Because huge files are split into chunks, speaker labels may reset between chunks. For example, Speaker 1 in Chunk 1 may not always be the same person as Speaker 1 in Chunk 4. The final notes prompt is designed to avoid inventing owners when speaker identity is unclear.
+Because huge files are split into chunks, speaker labels may reset between chunks. For example, Speaker 1 in Chunk 1 may not always be the same person as Speaker 1 in Chunk 4.
+
+This run includes conservative speaker reconciliation. The app writes stable generic speaker labels first, then optionally asks for user-confirmed names. It does not invent real names when evidence is unclear.
 """.strip()
 
     (run_dir / "README.md").write_text(run_readme, encoding="utf-8")
