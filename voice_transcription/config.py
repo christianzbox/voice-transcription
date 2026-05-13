@@ -9,6 +9,13 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 INPUT_DIR = BASE_DIR / "input"
 RUNS_DIR = BASE_DIR / "runs"
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
 AUDIO_EXTENSIONS = {
     ".m4a",
     ".mp3",
@@ -36,3 +43,4 @@ MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 TRANSCRIBE_MODEL = os.environ.get("VOICE_TRANSCRIPTION_TRANSCRIBE_MODEL", "gpt-4o-transcribe-diarize")
 NOTES_MODEL = os.environ.get("VOICE_TRANSCRIPTION_NOTES_MODEL", "gpt-5.5")
+INTERACTIVE_SPEAKER_NAMING = _env_bool("VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING", True)

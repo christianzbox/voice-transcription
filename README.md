@@ -8,6 +8,8 @@ Voice Transcription takes large meeting recordings, including iPhone Voice Memo 
 
 - Raw diarized transcript JSON
 - Full timestamped speaker transcript
+- Stable cross-chunk speaker reconciliation
+- Optional user-confirmed speaker names
 - Chunk-level summaries
 - Rolling context across chunks
 - Final meeting notes
@@ -29,6 +31,49 @@ The app uses overlapping chunks by default:
 The overlap helps preserve meaning around boundaries. For example, chunk 2 may start 45 seconds before chunk 1 ended. The summarization prompts are told to treat repeated audio as context, not as new decisions or duplicate action items.
 
 The app also maintains a `03a_rolling_context.md` file while processing. This carries forward active topics, unresolved questions, decisions, action items, names, and important constraints from chunk to chunk.
+
+## Speaker reconciliation
+
+Large recordings are split into chunks, and diarized labels can reset between chunks. For example, `Speaker 1` in chunk 1 may be a different person than `Speaker 1` in chunk 2.
+
+After transcription, the app runs a conservative reconciliation stage that maps chunk-local labels into stable meeting-wide generic speakers:
+
+    Chunk 1 | Speaker 1 -> Speaker A
+    Chunk 1 | Speaker 2 -> Speaker B
+    Chunk 2 | Speaker 2 -> Speaker A
+    Chunk 2 | Speaker 1 -> Speaker B
+
+The app writes both machine-readable JSON and a human-readable report so the mapping is auditable. If the reconciliation model returns invalid JSON, references unknown speakers, or leaves speakers unmapped, the app downgrades or falls back instead of crashing.
+
+The app does not invent real names. Names are only used when:
+
+- You enter them during the optional naming prompt.
+- A speaker self-identifies.
+- Another speaker explicitly addresses them.
+- The transcript contains strong explicit evidence, and the report explains why.
+
+When evidence is unclear, the app keeps labels such as `Speaker A`, `Speaker B`, or `Unknown Speaker`.
+
+## Optional speaker naming
+
+When running from an interactive terminal, the app shows a short card for each reconciled speaker with first appearance, approximate speaking amount, possible explicit-name evidence, confidence, and representative quotes.
+
+You can enter a name or press Enter to keep the generic label:
+
+    Name for Speaker A, or press Enter to keep generic:
+
+User-entered names are saved to `02d_speaker_name_map.json`. If any names are entered, the app also writes `02e_named_speaker_transcript.txt`. If no names are entered, the named transcript is skipped and the reconciled generic transcript remains the best speaker-labeled transcript.
+
+To disable interactive naming:
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING=false python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING="false"
+    python -m voice_transcription
 
 ## Folder layout
 
@@ -86,9 +131,16 @@ The important files are:
 
 - `01_full_raw_diarized_chunks.json`
 - `02_full_merged_speaker_transcript.txt`
+- `02a_speaker_reconciliation.json`
+- `02b_speaker_reconciliation_report.md`
+- `02c_reconciled_speaker_transcript.txt`
+- `02d_speaker_name_map.json` if interactive naming ran
+- `02e_named_speaker_transcript.txt` if names were entered
 - `03_all_chunk_summaries.md`
 - `03a_rolling_context.md`
 - `04_final_meeting_notes.md`
+
+The `runs/` folder is ignored by Git except for `runs/.gitkeep`, so generated outputs are not committed.
 
 ## Supported audio inputs
 
@@ -111,4 +163,4 @@ Windows PowerShell:
 
 ## Notes about speakers
 
-Large files are split into chunks. Speaker labels can reset between chunks, so `Speaker 1` in chunk 1 may not always be the same person as `Speaker 1` in chunk 4. The final notes prompt avoids inventing owners when identity is unclear.
+Speaker reconciliation is useful but not perfect. Review `02b_speaker_reconciliation_report.md` when speaker identity matters. The final notes prompt uses user-confirmed names first, then reconciled generic speaker labels, then the original merged transcript if reconciliation was unavailable. It also preserves uncertainty and avoids duplicating action items caused by overlap.
