@@ -70,6 +70,18 @@ When you enter a name, the app also updates a local `speaker_profiles.json` file
 
 These suggestions are not automatic voice recognition. They are text-based hints for you to confirm, and pressing Enter keeps the generic label.
 
+You can also save local reference clips for known speakers:
+
+macOS/Linux:
+
+    python -m voice_transcription.add_speaker_profile --name Christian path/to/christian-reference.m4a
+
+Windows PowerShell:
+
+    python -m voice_transcription.add_speaker_profile --name Christian .\path\to\christian-reference.m4a
+
+Reference clips are copied into `speaker_reference_clips/`, and metadata is stored in `speaker_profiles.json`. Both are ignored by Git. This establishes a local profile data model for future voice-aware speaker matching, but the app does not auto-assign names from reference clips yet.
+
 To disable interactive naming:
 
 macOS/Linux:
