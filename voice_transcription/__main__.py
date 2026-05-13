@@ -1,0 +1,285 @@
+from datetime import datetime
+import json
+from pathlib import Path
+import sys
+
+from openai import OpenAI
+
+from .audio import format_ts, get_duration_seconds, is_audio_file, make_chunks
+from .config import (
+    AUDIO_BITRATE,
+    AUDIO_SAMPLE_RATE,
+    BASE_DIR,
+    CHUNK_OVERLAP_SECONDS,
+    CHUNK_SECONDS,
+    INPUT_DIR,
+    NOTES_MODEL,
+    RUNS_DIR,
+    TRANSCRIBE_MODEL,
+)
+from .openai_workflow import (
+    build_chunk_transcript,
+    create_final_notes,
+    summarize_chunk,
+    transcribe_chunk,
+    update_rolling_context,
+)
+from .secrets import get_api_key
+
+
+def pick_audio_file() -> Path:
+    INPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    candidates = sorted(
+        [path for path in INPUT_DIR.iterdir() if is_audio_file(path)],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not candidates:
+        print("")
+        print("No audio files found.")
+        print("Drop a .m4a/.mp3/.wav/.mp4/.webm file into:")
+        print(INPUT_DIR)
+        print("")
+        manual = input("Or drag an audio file here, then press Enter: ").strip().strip('"').strip("'")
+        if not manual:
+            sys.exit(1)
+        return Path(manual).expanduser()
+
+    print("")
+    print("Audio files found in input/:")
+    print("")
+
+    for i, path in enumerate(candidates, start=1):
+        size_mb = path.stat().st_size / (1024 * 1024)
+        duration = get_duration_seconds(path)
+        duration_text = format_ts(duration) if duration else "unknown duration"
+        print(f"{i}. {path.name} — {size_mb:.1f} MB — {duration_text}")
+
+    print("")
+    choice = input("Pick a number, or press Enter for the newest file: ").strip()
+
+    if choice == "":
+        return candidates[0]
+
+    if choice.isdigit() and 1 <= int(choice) <= len(candidates):
+        return candidates[int(choice) - 1]
+
+    print("Invalid choice.")
+    sys.exit(1)
+
+
+def main() -> None:
+    INPUT_DIR.mkdir(parents=True, exist_ok=True)
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+
+    api_key = get_api_key()
+    client = OpenAI(api_key=api_key)
+
+    audio_path = pick_audio_file()
+
+    if not audio_path.exists():
+        print(f"File not found: {audio_path}")
+        sys.exit(1)
+
+    run_name = f"{audio_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_dir = RUNS_DIR / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    print("")
+    print("Selected file:")
+    print(audio_path)
+    print("")
+    print("Output folder:")
+    print(run_dir)
+    print("")
+
+    original_duration = get_duration_seconds(audio_path)
+    original_size_mb = audio_path.stat().st_size / (1024 * 1024)
+
+    metadata = {
+        "app_base_dir": str(BASE_DIR),
+        "input_file": str(audio_path),
+        "input_size_mb": original_size_mb,
+        "input_duration_seconds": original_duration,
+        "chunk_seconds": CHUNK_SECONDS,
+        "chunk_overlap_seconds": CHUNK_OVERLAP_SECONDS,
+        "audio_bitrate": AUDIO_BITRATE,
+        "audio_sample_rate": AUDIO_SAMPLE_RATE,
+        "transcribe_model": TRANSCRIBE_MODEL,
+        "notes_model": NOTES_MODEL,
+        "created_at": datetime.now().isoformat(),
+    }
+
+    (run_dir / "00_run_metadata.json").write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    chunks = make_chunks(audio_path, run_dir)
+
+    all_raw: list[dict] = []
+    full_transcript_parts: list[str] = []
+    chunk_summaries: list[str] = []
+
+    raw_dir = run_dir / "raw_chunk_json"
+    raw_dir.mkdir(exist_ok=True)
+
+    transcript_dir = run_dir / "chunk_transcripts"
+    transcript_dir.mkdir(exist_ok=True)
+
+    summary_dir = run_dir / "chunk_summaries"
+    summary_dir.mkdir(exist_ok=True)
+
+    rolling_context = ""
+
+    for index, chunk in enumerate(chunks):
+        chunk_path = Path(chunk["path"])
+        chunk_start = float(chunk["start_seconds"])
+        chunk_duration = float(chunk["duration_seconds"])
+        chunk_name = f"Chunk {index + 1}"
+
+        data = transcribe_chunk(client, chunk_path, index, len(chunks))
+
+        raw_record = {
+            "chunk_index": index,
+            "chunk_name": chunk_name,
+            "chunk_file": str(chunk_path),
+            "offset_seconds": chunk_start,
+            "duration_seconds": chunk_duration,
+            "requested_duration_seconds": chunk.get("requested_duration_seconds"),
+            "overlap_seconds": chunk.get("overlap_seconds", 0),
+            "transcription": data,
+        }
+
+        all_raw.append(raw_record)
+
+        raw_path = raw_dir / f"chunk_{index + 1:03d}.json"
+        raw_path.write_text(json.dumps(raw_record, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        chunk_transcript = build_chunk_transcript(data, chunk_start, chunk_name)
+
+        chunk_transcript_path = transcript_dir / f"chunk_{index + 1:03d}_transcript.txt"
+        chunk_transcript_path.write_text(chunk_transcript, encoding="utf-8")
+
+        overlap_note = ""
+        if index > 0 and CHUNK_OVERLAP_SECONDS > 0:
+            overlap_note = (
+                f"This chunk starts at {format_ts(chunk_start)} and overlaps approximately "
+                f"{CHUNK_OVERLAP_SECONDS} seconds with the previous chunk. "
+                "Repeated content near the beginning is likely boundary context, not a new decision."
+            )
+
+        full_transcript_parts.append(
+            f"\n\n# {chunk_name} — starts at {format_ts(chunk_start)}"
+            f" — overlap with previous: {chunk.get('overlap_seconds', 0)}s\n\n{chunk_transcript}"
+        )
+
+        print(f"Summarizing chunk {index + 1}/{len(chunks)} with rolling context...")
+        chunk_summary = summarize_chunk(
+            client=client,
+            transcript_text=chunk_transcript,
+            chunk_name=chunk_name,
+            previous_context=rolling_context,
+            overlap_notice=overlap_note,
+        )
+
+        chunk_summary_path = summary_dir / f"chunk_{index + 1:03d}_summary.md"
+        chunk_summary_path.write_text(chunk_summary, encoding="utf-8")
+
+        chunk_summaries.append(chunk_summary)
+
+        print(f"Updating rolling context after chunk {index + 1}/{len(chunks)}...")
+        rolling_context = update_rolling_context(
+            client=client,
+            previous_context=rolling_context,
+            new_chunk_summary=chunk_summary,
+            chunk_name=chunk_name,
+        )
+
+        rolling_context_path = run_dir / "03a_rolling_context.md"
+        rolling_context_path.write_text(rolling_context, encoding="utf-8")
+
+    full_raw_path = run_dir / "01_full_raw_diarized_chunks.json"
+    full_raw_path.write_text(json.dumps(all_raw, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    full_transcript = "\n".join(full_transcript_parts).strip()
+
+    full_transcript_path = run_dir / "02_full_merged_speaker_transcript.txt"
+    full_transcript_path.write_text(full_transcript, encoding="utf-8")
+
+    all_chunk_summaries = "\n\n---\n\n".join(chunk_summaries)
+
+    all_chunk_summaries_path = run_dir / "03_all_chunk_summaries.md"
+    all_chunk_summaries_path.write_text(all_chunk_summaries, encoding="utf-8")
+
+    print("")
+    print("Creating final meeting notes...")
+
+    final_notes = create_final_notes(
+        client=client,
+        all_chunk_summaries=all_chunk_summaries,
+        full_transcript_path=full_transcript_path,
+        rolling_context=rolling_context,
+    )
+
+    final_notes_path = run_dir / "04_final_meeting_notes.md"
+    final_notes_path.write_text(final_notes, encoding="utf-8")
+
+    run_readme = f"""
+# Voice Transcription Run
+
+Input file:
+
+{audio_path}
+
+Output files:
+
+1. `01_full_raw_diarized_chunks.json`
+   - Raw JSON for all transcribed chunks.
+
+2. `02_full_merged_speaker_transcript.txt`
+   - Full timestamped transcript.
+
+3. `03_all_chunk_summaries.md`
+   - Summaries for each chunk.
+
+4. `03a_rolling_context.md`
+   - Compact context carried forward between chunks.
+
+5. `04_final_meeting_notes.md`
+   - Final meeting notes.
+
+Chunking behavior:
+
+- Chunk length: {CHUNK_SECONDS} seconds
+- Overlap: {CHUNK_OVERLAP_SECONDS} seconds
+
+The overlap reduces context loss around boundaries. The summarization prompts are told to treat repeated overlapped content as context, not as new decisions.
+
+Important note about speakers:
+
+Because huge files are split into chunks, speaker labels may reset between chunks. For example, Speaker 1 in Chunk 1 may not always be the same person as Speaker 1 in Chunk 4. The final notes prompt is designed to avoid inventing owners when speaker identity is unclear.
+""".strip()
+
+    (run_dir / "README.md").write_text(run_readme, encoding="utf-8")
+
+    print("")
+    print("Done.")
+    print("")
+    print("Created folder:")
+    print(run_dir)
+    print("")
+    print("Final notes:")
+    print(final_notes_path)
+    print("")
+    print("Full transcript:")
+    print(full_transcript_path)
+    print("")
+    print("Rolling context:")
+    print(run_dir / "03a_rolling_context.md")
+
+
+if __name__ == "__main__":
+    main()
