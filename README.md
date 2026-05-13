@@ -112,6 +112,7 @@ For non-interactive updates:
     python -m voice_transcription.rename_speakers runs/<recording-name>_<timestamp> --set "Speaker A=Christian" --set "Speaker B=Sarah"
 
 The command updates `02d_speaker_name_map.json` and rerenders `02e_named_speaker_transcript.txt`. It does not call the transcription API.
+If the run has `02f_speaker_profile_suggestions.json`, the interactive rename prompt reuses those saved suggestions.
 
 To disable known-speaker profile suggestions while keeping manual naming:
 
