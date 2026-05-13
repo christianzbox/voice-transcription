@@ -80,6 +80,10 @@ Windows PowerShell:
 
     python -m voice_transcription.add_speaker_profile --name Christian .\path\to\christian-reference.m4a
 
+To have the app transcribe the reference clip once and store that transcript:
+
+    python -m voice_transcription.add_speaker_profile --name Christian path/to/christian-reference.m4a --transcribe
+
 Reference clips are copied into `speaker_reference_clips/`, and metadata is stored in `speaker_profiles.json`. Both are ignored by Git. This establishes a local profile data model for future voice-aware speaker matching, but the app does not auto-assign names from reference clips yet.
 
 If reference clips include transcript text, future runs write conservative reference-match suggestions to `02g_speaker_reference_match_suggestions.json` and show those suggestions during speaker naming. These suggestions are transcript/reference-text evidence, not biometric voice recognition, and still require user confirmation.
