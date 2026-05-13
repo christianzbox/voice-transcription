@@ -82,6 +82,10 @@ Windows PowerShell:
 
 Reference clips are copied into `speaker_reference_clips/`, and metadata is stored in `speaker_profiles.json`. Both are ignored by Git. This establishes a local profile data model for future voice-aware speaker matching, but the app does not auto-assign names from reference clips yet.
 
+To inspect your local known-speaker profiles:
+
+    python -m voice_transcription.list_speaker_profiles
+
 To disable interactive naming:
 
 macOS/Linux:
