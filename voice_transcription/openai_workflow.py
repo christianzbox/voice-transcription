@@ -6,7 +6,8 @@ from typing import Any
 from openai import OpenAI
 
 from .audio import format_ts
-from .config import NOTES_MODEL, TRANSCRIBE_MODEL
+from .config import NOTES_MODEL, SUMMARY_TEMPLATE, TRANSCRIBE_MODEL
+from .summary_templates import get_summary_template
 
 
 def object_to_dict(obj: Any) -> dict[str, Any]:
@@ -97,6 +98,7 @@ def summarize_chunk(
 ) -> str:
     previous_context_section = previous_context.strip() or "None yet."
     overlap_section = overlap_notice.strip() or "No special overlap note."
+    template_name, template_instructions = get_summary_template(SUMMARY_TEMPLATE)
 
     prompt = f"""
 You are summarizing one chunk of a longer meeting transcript.
@@ -110,6 +112,9 @@ Previous rolling context:
 
 Overlap note:
 {overlap_section}
+
+Summary template: {template_name}
+{template_instructions}
 
 Important:
 - This is only one chunk of a longer meeting.
@@ -218,6 +223,7 @@ def create_final_notes(
     best_transcript_path = named_transcript_path or reconciled_transcript_path or full_transcript_path
     reconciled_path_section = str(reconciled_transcript_path) if reconciled_transcript_path else "No reconciled transcript was available."
     named_path_section = str(named_transcript_path) if named_transcript_path else "No user-named transcript was available."
+    template_name, template_instructions = get_summary_template(SUMMARY_TEMPLATE)
     name_map_section = (
         json.dumps(speaker_name_map, indent=2, ensure_ascii=False)
         if speaker_name_map
@@ -229,6 +235,9 @@ You are creating final meeting notes from chunk-level meeting summaries.
 
 Goal:
 Create practical, accurate meeting notes.
+
+Summary template: {template_name}
+{template_instructions}
 
 Important:
 - Audio chunks may overlap, so repeated content may appear near chunk boundaries.

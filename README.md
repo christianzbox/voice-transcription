@@ -198,6 +198,26 @@ Windows PowerShell:
     $env:VOICE_TRANSCRIPTION_AUDIO_BITRATE="32k"
     python -m voice_transcription
 
+## Summary templates
+
+The default final notes format is a general meeting-notes template. You can tune chunk summaries and final notes for a specific meeting type:
+
+- `meeting`
+- `engineering`
+- `sales`
+- `interview`
+- `executive`
+- `legal`
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE=engineering python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE="engineering"
+    python -m voice_transcription
+
 ## Notes about speakers
 
 Speaker reconciliation is useful but not perfect. Review `02b_speaker_reconciliation_report.md` when speaker identity matters. The final notes prompt uses user-confirmed names first, then reconciled generic speaker labels, then the original merged transcript if reconciliation was unavailable. It also preserves uncertainty and avoids duplicating action items caused by overlap.
