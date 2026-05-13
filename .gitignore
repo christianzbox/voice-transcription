@@ -9,6 +9,7 @@ runs/*
 !runs/.gitkeep
 input/*
 !input/.gitkeep
+speaker_profiles.json
 
 # OS
 .DS_Store
