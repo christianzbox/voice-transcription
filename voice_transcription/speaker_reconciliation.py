@@ -659,6 +659,7 @@ The app preserved the original merged transcript and continued without stable cr
 def prompt_for_speaker_names(
     reconciliation: dict[str, Any],
     utterances: list[dict[str, Any]],
+    existing_name_map: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     if reconciliation.get("status") != "success":
         return None
@@ -680,17 +681,24 @@ def prompt_for_speaker_names(
 
     entries: dict[str, dict[str, Any]] = {}
     any_user_names = False
+    existing_speakers = (existing_name_map or {}).get("speakers") or {}
 
     for global_speaker_id in sorted(stats):
         item = stats[global_speaker_id]
         speaker = speaker_by_id.get(global_speaker_id, {})
         possible_name = speaker.get("possible_real_name")
         confidence = speaker.get("confidence") or "low"
+        existing_entry = existing_speakers.get(global_speaker_id)
+        existing_display_name = ""
+        if isinstance(existing_entry, dict):
+            existing_display_name = _clean_text(existing_entry.get("display_name"), limit=120)
 
         print(global_speaker_id)
         print(f"- First appearance: {format_ts(item['first_appearance_seconds'])}")
         print(f"- Approximate utterances: {item['utterance_count']}")
         print(f"- Approximate speaking time: {format_ts(item['speaking_seconds'])}")
+        if existing_display_name and existing_display_name != global_speaker_id:
+            print(f"- Current name: {existing_display_name}")
         if possible_name:
             print(f"- Possible name: {possible_name}, {confidence} confidence")
         else:
@@ -701,7 +709,11 @@ def prompt_for_speaker_names(
             print(f"  {index}. \"{quote}\"")
 
         try:
-            entered_name = input(f"Name for {global_speaker_id}, or press Enter to keep generic: ").strip()
+            if existing_display_name and existing_display_name != global_speaker_id:
+                prompt = f"Name for {global_speaker_id}, or press Enter to keep {existing_display_name}: "
+            else:
+                prompt = f"Name for {global_speaker_id}, or press Enter to keep generic: "
+            entered_name = input(prompt).strip()
         except EOFError:
             print("Skipping remaining speaker naming because input ended.")
             entered_name = ""
@@ -710,6 +722,12 @@ def prompt_for_speaker_names(
             any_user_names = True
             entries[global_speaker_id] = {
                 "display_name": entered_name,
+                "source": "user",
+            }
+        elif existing_display_name and existing_display_name != global_speaker_id:
+            any_user_names = True
+            entries[global_speaker_id] = {
+                "display_name": existing_display_name,
                 "source": "user",
             }
         else:
