@@ -121,6 +121,20 @@ The API key is not stored in the repo.
 3. Open the newest folder in `runs/`.
 4. The main output is `04_final_meeting_notes.md`.
 
+## Ask questions about a run
+
+After a run completes, you can ask follow-up questions without retranscribing audio:
+
+macOS/Linux:
+
+    python -m voice_transcription.ask runs/<recording-name>_<timestamp> --question "What did Christian commit to?"
+
+Windows PowerShell:
+
+    python -m voice_transcription.ask .\runs\<recording-name>_<timestamp> --question "List all deadlines."
+
+If you omit the run folder, the command uses the newest folder in `runs/`. Answers are appended to `05_ask_answers.md` unless you pass `--no-save`.
+
 ## Output files
 
 Each run creates a folder like:
@@ -139,6 +153,7 @@ The important files are:
 - `03_all_chunk_summaries.md`
 - `03a_rolling_context.md`
 - `04_final_meeting_notes.md`
+- `05_ask_answers.md` if you use the ask command
 
 The `runs/` folder is ignored by Git except for `runs/.gitkeep`, so generated outputs are not committed.
 
