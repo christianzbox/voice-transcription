@@ -285,6 +285,23 @@ Windows PowerShell:
     $env:VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE="engineering"
     python -m voice_transcription
 
+You can also create local custom templates. Add a Markdown file under `templates/`:
+
+    templates/customer-retro.md
+
+Then run:
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE=customer-retro python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE="customer-retro"
+    python -m voice_transcription
+
+The `templates/` folder is ignored by Git except for `templates/.gitkeep`, so personal or customer-specific prompts are not committed. `VOICE_TRANSCRIPTION_SUMMARY_TEMPLATE` can also point directly to a `.md` file path.
+
 ## Notes about speakers
 
 Speaker reconciliation is useful but not perfect. Review `02b_speaker_reconciliation_report.md` when speaker identity matters. The final notes prompt uses user-confirmed names first, then reconciled generic speaker labels, then the original merged transcript if reconciliation was unavailable. It also preserves uncertainty and avoids duplicating action items caused by overlap.
