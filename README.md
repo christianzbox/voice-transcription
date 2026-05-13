@@ -10,6 +10,7 @@ Voice Transcription takes large meeting recordings, including iPhone Voice Memo 
 - Full timestamped speaker transcript
 - Stable cross-chunk speaker reconciliation
 - Optional user-confirmed speaker names
+- Local speaker profile suggestions
 - Chunk-level summaries
 - Rolling context across chunks
 - Final meeting notes
@@ -64,6 +65,10 @@ You can enter a name or press Enter to keep the generic label:
 
 User-entered names are saved to `02d_speaker_name_map.json`. If any names are entered, the app also writes `02e_named_speaker_transcript.txt`. If no names are entered, the named transcript is skipped and the reconciled generic transcript remains the best speaker-labeled transcript.
 
+When you enter a name, the app also updates a local `speaker_profiles.json` file with that user-confirmed name and a few representative quotes. That file is ignored by Git. Future runs can use it to show conservative known-speaker suggestions during the naming prompt.
+
+These suggestions are not automatic voice recognition. They are text-based hints for you to confirm, and pressing Enter keeps the generic label.
+
 To disable interactive naming:
 
 macOS/Linux:
@@ -73,6 +78,17 @@ macOS/Linux:
 Windows PowerShell:
 
     $env:VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING="false"
+    python -m voice_transcription
+
+To disable known-speaker profile suggestions while keeping manual naming:
+
+macOS/Linux:
+
+    VOICE_TRANSCRIPTION_SPEAKER_PROFILE_SUGGESTIONS=false python -m voice_transcription
+
+Windows PowerShell:
+
+    $env:VOICE_TRANSCRIPTION_SPEAKER_PROFILE_SUGGESTIONS="false"
     python -m voice_transcription
 
 ## Folder layout
@@ -136,6 +152,7 @@ The important files are:
 - `02c_reconciled_speaker_transcript.txt`
 - `02d_speaker_name_map.json` if interactive naming ran
 - `02e_named_speaker_transcript.txt` if names were entered
+- `02f_speaker_profile_suggestions.json` if profile suggestions ran
 - `03_all_chunk_summaries.md`
 - `03a_rolling_context.md`
 - `04_final_meeting_notes.md`
