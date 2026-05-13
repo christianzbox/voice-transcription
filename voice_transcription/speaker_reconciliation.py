@@ -659,6 +659,7 @@ The app preserved the original merged transcript and continued without stable cr
 def prompt_for_speaker_names(
     reconciliation: dict[str, Any],
     utterances: list[dict[str, Any]],
+    profile_suggestions: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     if reconciliation.get("status") != "success":
         return None
@@ -672,10 +673,12 @@ def prompt_for_speaker_names(
         str(speaker.get("global_speaker_id")): speaker
         for speaker in reconciliation.get("global_speakers") or []
     }
+    suggestions_by_id = (profile_suggestions or {}).get("suggestions") or {}
 
     print("")
     print("Speaker naming")
     print("Enter a name for any speaker you recognize, or press Enter to keep the generic label.")
+    print("Profile matches are suggestions only; type the name if the suggestion is correct.")
     print("")
 
     entries: dict[str, dict[str, Any]] = {}
@@ -695,6 +698,15 @@ def prompt_for_speaker_names(
             print(f"- Possible name: {possible_name}, {confidence} confidence")
         else:
             print("- Possible name: None")
+        profile_suggestion = suggestions_by_id.get(global_speaker_id)
+        if isinstance(profile_suggestion, dict):
+            print(
+                f"- Known profile suggestion: {profile_suggestion.get('suggested_name')} "
+                f"({profile_suggestion.get('confidence', 'low')} confidence)"
+            )
+            reasoning = _clean_text(profile_suggestion.get("reasoning"), limit=220)
+            if reasoning:
+                print(f"  {reasoning}")
         print("- Representative quotes:")
         quotes = item["representative_quotes"] or ["No representative quotes available."]
         for index, quote in enumerate(quotes[:3], start=1):
