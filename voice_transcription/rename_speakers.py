@@ -22,6 +22,33 @@ def _load_json(path: Path) -> dict[str, Any] | list[dict[str, Any]]:
         raise RuntimeError(f"Could not read {path}: {exc}") from exc
 
 
+def _load_profile_suggestions(run_dir: Path) -> dict[str, Any]:
+    suggestions_path = run_dir / "02f_speaker_profile_suggestions.json"
+    if not suggestions_path.exists():
+        return {"status": "skipped", "suggestions": {}, "warnings": []}
+
+    try:
+        loaded = _load_json(suggestions_path)
+    except RuntimeError as exc:
+        return {"status": "failed", "suggestions": {}, "warnings": [str(exc)]}
+
+    if not isinstance(loaded, dict):
+        return {
+            "status": "failed",
+            "suggestions": {},
+            "warnings": [f"{suggestions_path} did not contain an object."],
+        }
+
+    suggestions = loaded.get("suggestions")
+    if not isinstance(suggestions, dict):
+        loaded["suggestions"] = {}
+    warnings = loaded.get("warnings")
+    if not isinstance(warnings, list):
+        loaded["warnings"] = []
+
+    return loaded
+
+
 def _latest_run_dir() -> Path:
     if not RUNS_DIR.exists():
         raise RuntimeError(f"Runs folder does not exist: {RUNS_DIR}")
@@ -108,6 +135,7 @@ def rerender_speaker_names(run_dir: Path, assignments: dict[str, str] | None = N
             reconciliation,
             utterances,
             existing_name_map=existing_name_map,
+            profile_suggestions=_load_profile_suggestions(run_dir),
         )
 
     if speaker_name_map is None:
