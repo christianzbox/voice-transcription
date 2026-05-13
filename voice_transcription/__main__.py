@@ -35,6 +35,7 @@ from .speaker_profiles import (
     load_speaker_profiles,
     save_speaker_profiles,
     suggest_profile_matches,
+    suggest_reference_clip_matches,
     update_profiles_from_user_names,
 )
 from .speaker_reconciliation import (
@@ -267,6 +268,7 @@ def main() -> None:
     speaker_name_map_path = None
     named_transcript_path = None
     profile_suggestions = {"status": "skipped", "suggestions": {}, "warnings": []}
+    reference_match_suggestions = {"status": "skipped", "suggestions": {}, "warnings": []}
 
     if reconciliation.get("status") == "success" and SPEAKER_PROFILE_SUGGESTIONS:
         speaker_profiles = load_speaker_profiles()
@@ -280,6 +282,16 @@ def main() -> None:
             json.dumps(profile_suggestions, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        reference_match_suggestions = suggest_reference_clip_matches(
+            client=client,
+            profiles_data=speaker_profiles,
+            utterances=reconciled_utterances,
+        )
+        reference_match_suggestions_path = run_dir / "02g_speaker_reference_match_suggestions.json"
+        reference_match_suggestions_path.write_text(
+            json.dumps(reference_match_suggestions, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
     elif not SPEAKER_PROFILE_SUGGESTIONS:
         print("Skipping speaker profile suggestions because VOICE_TRANSCRIPTION_SPEAKER_PROFILE_SUGGESTIONS is false.")
 
@@ -288,6 +300,7 @@ def main() -> None:
             reconciliation,
             reconciled_utterances,
             profile_suggestions=profile_suggestions,
+            reference_match_suggestions=reference_match_suggestions,
         )
         if speaker_name_map is not None:
             speaker_name_map_path = run_dir / "02d_speaker_name_map.json"
@@ -391,19 +404,22 @@ Output files:
 8. `02f_speaker_profile_suggestions.json`
    - Conservative known-speaker profile suggestions, if local profiles exist.
 
-9. `03_all_chunk_summaries.md`
+9. `02g_speaker_reference_match_suggestions.json`
+   - Conservative reference-clip transcript match suggestions, if reference transcripts exist.
+
+10. `03_all_chunk_summaries.md`
    - Summaries for each chunk.
 
-10. `03a_rolling_context.md`
+11. `03a_rolling_context.md`
    - Compact context carried forward between chunks.
 
-11. `04_final_meeting_notes.md`
+12. `04_final_meeting_notes.md`
    - Final meeting notes.
 
-11. `05_mind_map.json`
+13. `05_mind_map.json`
    - Structured topic map, if mind map generation is enabled.
 
-12. `05_mind_map.md`
+14. `05_mind_map.md`
    - Human-readable topic map, if mind map generation is enabled.
 
 Chunking behavior:

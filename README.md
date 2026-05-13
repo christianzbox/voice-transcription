@@ -80,7 +80,13 @@ Windows PowerShell:
 
     python -m voice_transcription.add_speaker_profile --name Christian .\path\to\christian-reference.m4a
 
+To have the app transcribe the reference clip once and store that transcript:
+
+    python -m voice_transcription.add_speaker_profile --name Christian path/to/christian-reference.m4a --transcribe
+
 Reference clips are copied into `speaker_reference_clips/`, and metadata is stored in `speaker_profiles.json`. Both are ignored by Git. This establishes a local profile data model for future voice-aware speaker matching, but the app does not auto-assign names from reference clips yet.
+
+If reference clips include transcript text, future runs write conservative reference-match suggestions to `02g_speaker_reference_match_suggestions.json` and show those suggestions during speaker naming. These suggestions are transcript/reference-text evidence, not biometric voice recognition, and still require user confirmation.
 
 To inspect your local known-speaker profiles:
 
@@ -116,6 +122,7 @@ For non-interactive updates:
     python -m voice_transcription.rename_speakers runs/<recording-name>_<timestamp> --set "Speaker A=Christian" --set "Speaker B=Sarah"
 
 The command updates `02d_speaker_name_map.json` and rerenders `02e_named_speaker_transcript.txt`. It does not call the transcription API.
+If the run has `02f_speaker_profile_suggestions.json`, the interactive rename prompt reuses those saved suggestions.
 
 To disable known-speaker profile suggestions while keeping manual naming:
 
@@ -210,6 +217,7 @@ The important files are:
 - `02d_speaker_name_map.json` if interactive naming ran
 - `02e_named_speaker_transcript.txt` if names were entered
 - `02f_speaker_profile_suggestions.json` if profile suggestions ran
+- `02g_speaker_reference_match_suggestions.json` if reference matching ran
 - `03_all_chunk_summaries.md`
 - `03a_rolling_context.md`
 - `04_final_meeting_notes.md`
