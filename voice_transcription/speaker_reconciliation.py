@@ -4,7 +4,6 @@ import json
 import re
 import sys
 from collections import defaultdict
-from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
@@ -12,7 +11,6 @@ from openai import OpenAI
 from .audio import format_ts
 from .config import NOTES_MODEL
 from .openai_workflow import response_text
-
 
 VALID_CONFIDENCE = {"high", "medium", "low"}
 ALLOWED_NAME_EVIDENCE = {
@@ -306,10 +304,7 @@ Full merged transcript text for additional context:
 
 
 def _known_chunk_speakers(utterances: list[dict[str, Any]]) -> set[tuple[int, str]]:
-    return {
-        (int(utterance["chunk_index"]), str(utterance["local_speaker"]))
-        for utterance in utterances
-    }
+    return {(int(utterance["chunk_index"]), str(utterance["local_speaker"])) for utterance in utterances}
 
 
 def validate_reconciliation_result(
@@ -410,9 +405,7 @@ def validate_reconciliation_result(
                 "confidence": "low",
                 "reasoning": "Referenced by a valid mapping, but omitted from global_speakers.",
             }
-            validation_warnings.append(
-                f"Added missing global speaker definition for {global_speaker_id}."
-            )
+            validation_warnings.append(f"Added missing global speaker definition for {global_speaker_id}.")
 
     used_global_ids = set(global_speakers)
 
@@ -554,7 +547,9 @@ def render_transcript(
     lines: list[str] = []
 
     for utterance in utterances:
-        global_speaker_id = str(utterance.get("global_speaker_id") or utterance.get("local_speaker") or "Unknown Speaker")
+        global_speaker_id = str(
+            utterance.get("global_speaker_id") or utterance.get("local_speaker") or "Unknown Speaker"
+        )
         display_name = name_map.get(global_speaker_id, global_speaker_id)
         lines.append(
             f"[{format_ts(utterance['start_seconds'])}-{format_ts(utterance['end_seconds'])}] "
@@ -583,8 +578,7 @@ The app preserved the original merged transcript and continued without stable cr
 
     stats = _speaker_stats(utterances, "global_speaker_id")
     speaker_by_id = {
-        str(speaker.get("global_speaker_id")): speaker
-        for speaker in reconciliation.get("global_speakers") or []
+        str(speaker.get("global_speaker_id")): speaker for speaker in reconciliation.get("global_speakers") or []
     }
 
     lines: list[str] = [
@@ -631,7 +625,7 @@ The app preserved the original merged transcript and continued without stable cr
         lines.append(f"### {global_speaker_id}")
         quotes = stats[global_speaker_id]["representative_quotes"] or ["No representative quotes available."]
         for index, quote in enumerate(quotes, start=1):
-            lines.append(f"{index}. \"{quote}\"")
+            lines.append(f'{index}. "{quote}"')
         lines.append("")
 
     warnings = list(reconciliation.get("warnings") or []) + list(reconciliation.get("validation_warnings") or [])
@@ -671,8 +665,7 @@ def prompt_for_speaker_names(
 
     stats = _speaker_stats(utterances, "global_speaker_id")
     speaker_by_id = {
-        str(speaker.get("global_speaker_id")): speaker
-        for speaker in reconciliation.get("global_speakers") or []
+        str(speaker.get("global_speaker_id")): speaker for speaker in reconciliation.get("global_speakers") or []
     }
     suggestions_by_id = (profile_suggestions or {}).get("suggestions") or {}
 
@@ -718,7 +711,7 @@ def prompt_for_speaker_names(
         print("- Representative quotes:")
         quotes = item["representative_quotes"] or ["No representative quotes available."]
         for index, quote in enumerate(quotes[:3], start=1):
-            print(f"  {index}. \"{quote}\"")
+            print(f'  {index}. "{quote}"')
 
         try:
             if existing_display_name and existing_display_name != global_speaker_id:

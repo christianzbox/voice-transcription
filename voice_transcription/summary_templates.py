@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 DEFAULT_TEMPLATE = "meeting"
 
 SUMMARY_TEMPLATES: dict[str, str] = {

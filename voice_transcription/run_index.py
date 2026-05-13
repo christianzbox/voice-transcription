@@ -7,7 +7,6 @@ from typing import Any
 
 from .config import RUNS_DIR
 
-
 INDEX_PATH = RUNS_DIR / "index.json"
 
 

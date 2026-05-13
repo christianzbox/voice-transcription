@@ -207,6 +207,23 @@ The `runs/` folder is ignored by Git except for `runs/.gitkeep`, so generated ou
 
 Common formats include `.m4a`, `.mp3`, `.mp4`, `.wav`, and `.webm`.
 
+## Development checks
+
+Install runtime and development dependencies:
+
+    python -m pip install -r requirements.txt -r requirements-dev.txt
+
+Run the same checks as CI:
+
+    python -m ruff format --check .
+    python -m ruff check .
+    python -m py_compile voice_transcription/*.py
+    python -m pytest
+
+Format code locally:
+
+    python -m ruff format .
+
 ## Tuning
 
 Default chunk length is 10 minutes, default overlap is 45 seconds, and default compressed audio is 48k mono AAC.
