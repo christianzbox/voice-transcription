@@ -187,6 +187,27 @@ List recent indexed runs:
 
     python -m voice_transcription.library
 
+## Non-interactive processor mode
+
+For external workers such as Azure Functions, the app can run without prompting for an input file:
+
+macOS/Linux:
+
+    MEETING_TRANSCRIPTION_INPUT_FILE=/tmp/input/audio.m4a MEETING_TRANSCRIPTION_OUTPUT_DIR=/tmp/output VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING=false python -m voice_transcription.process_job
+
+Windows PowerShell:
+
+    $env:MEETING_TRANSCRIPTION_INPUT_FILE="C:\Temp\input\audio.m4a"
+    $env:MEETING_TRANSCRIPTION_OUTPUT_DIR="C:\Temp\output"
+    $env:VOICE_TRANSCRIPTION_INTERACTIVE_SPEAKER_NAMING="false"
+    python -m voice_transcription.process_job
+
+The command runs the same transcription workflow in a temporary run folder, then copies the top-level run artifacts into `MEETING_TRANSCRIPTION_OUTPUT_DIR`. This is the command shape expected by the Colony/Azure Functions meeting transcription worker.
+
+You can also pass paths as arguments:
+
+    python -m voice_transcription.process_job --input-file /tmp/input/audio.m4a --output-dir /tmp/output
+
 ## Ask questions about a run
 
 After a run completes, you can ask follow-up questions without retranscribing audio:
